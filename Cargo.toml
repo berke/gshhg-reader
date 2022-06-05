@@ -1,0 +1,11 @@
+[package]
+name = "gshhg-reader"
+version = "0.1.0"
+edition = "2021"
+authors = ["Berke DURAK <bd@exhrd.fr>"]
+license = "Apache-2.0 OR MIT"
+description = "Loader for the binary Wessel and Smith GSHHG shoreline files"
+repository = "https://github.com/berke/gshhg-reader"
+
+[dependencies]
+serde = { version = "1", features = ["serde_derive"] }
