@@ -3,6 +3,22 @@ use serde::{Serialize,Deserialize};
 
 pub type PolygonId = usize;
 
+#[derive(Debug,Clone,Serialize,Deserialize,PartialEq)]
+pub enum Level {
+    Land,
+    Lake,
+    IslandInLake,
+    PondInIslandInLake,
+    Other(u8)
+}
+
+#[derive(Debug,Clone,Serialize,Deserialize,PartialEq)]
+pub enum Source {
+    CiaWdbii,
+    Wvs,
+    Other(u8)
+}
+
 /// Global Self-consistent Hierarchical High-resolution Shorelines
 #[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct Polygon {
@@ -13,7 +29,11 @@ pub struct Polygon {
     pub n:usize,
 
     /// level + version << 8 + greenwich << 16 + source << 24 + river << 25
-    pub flag:u32,
+    pub level:Level,
+    pub version:u8,
+    pub greenwich_crossed:bool,
+    pub source:Source,
+    pub river:bool,
 
     /// Min/max extent in micro-degrees
     pub west:i32,
@@ -34,7 +54,10 @@ pub struct Polygon {
     pub ancestor:Option<PolygonId>,
 
     /// Points of the polygon
-    pub points:Vec<Point>
+    pub points:Vec<Point>,
+
+    /// Ids of contained polygons
+    pub children:Vec<PolygonId>
 }
 
 /// Each lon, lat pair is stored in micro-degrees in 4-byte signed integer format
@@ -70,6 +93,28 @@ fn read_id_option<R:Read>(r:R)->Result<Option<PolygonId>,Error> {
     }
 }
 
+impl From<u8> for Level {
+    fn from(x:u8)->Self {
+	match x {
+	    1 => Self::Land,
+	    2 => Self::Lake,
+	    3 => Self::IslandInLake,
+	    4 => Self::PondInIslandInLake,
+	    _ => Self::Other(x)
+	}
+    }
+}
+
+impl From<u8> for Source {
+    fn from(x:u8)->Self {
+	match x {
+	    0 => Self::CiaWdbii,
+	    1 => Self::Wvs,
+	    _ => Self::Other(x)
+	}
+    }
+}
+
 impl Point {
     pub fn from_reader<R:Read>(mut r:R)->Result<Self,Error> {
 	let x = read_i32(&mut r)?;
@@ -84,6 +129,13 @@ impl Polygon {
 	    .ok_or_else(|| Error::new(ErrorKind::Other,"Invalid negative ID"))?;
 	let n = read_u32(&mut r)? as usize;
 	let flag = read_u32(&mut r)?;
+
+	let level = Level::from((flag & 255) as u8);
+	let version = ((flag >> 8) & 255) as u8;
+	let greenwich_crossed = ((flag >> 16) & 1) != 0;
+	let source = Source::from(((flag >> 24) & 255) as u8);
+	let river = ((flag >> 24) & 1) != 0;
+	
 	let west = read_i32(&mut r)?;
 	let east = read_i32(&mut r)?;
 	let south = read_i32(&mut r)?;
@@ -99,7 +151,11 @@ impl Polygon {
 	Ok(Self{
 	    id,
 	    n,
-	    flag,
+	    level,
+	    version,
+	    greenwich_crossed,
+	    source,
+	    river,
 	    west,
 	    east,
 	    south,
@@ -108,7 +164,8 @@ impl Polygon {
 	    area_full,
 	    container,
 	    ancestor,
-	    points
+	    points,
+	    children:Vec::new()
 	})
 
     }
@@ -129,6 +186,15 @@ impl Gshhg {
 	    }
 
 	}
+
+	// Fill in children
+	let npoly = polygons.len();
+	for ipoly in 0..npoly {
+	    if let Some(iparent) = polygons[ipoly].container {
+		polygons[iparent].children.push(ipoly);
+	    }
+	}
+
 	Ok(Self{
 	    polygons
 	})
