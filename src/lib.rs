@@ -1,4 +1,5 @@
-use std::io::{Read,Error,ErrorKind};
+use std::io::{Read,ErrorKind};
+use anyhow::{bail,Result};
 use serde::{Serialize,Deserialize};
 
 pub type PolygonId = usize;
@@ -72,19 +73,19 @@ pub struct Gshhg {
     pub polygons:Vec<Polygon>
 }
 
-fn read_u32<R:Read>(mut r:R)->Result<u32,Error> {
+fn read_u32<R:Read>(mut r:R)->Result<u32> {
     let mut x = [0;4];
     r.read_exact(&mut x)?;
     Ok(u32::from_be_bytes(x))
 }
 
-fn read_i32<R:Read>(mut r:R)->Result<i32,Error> {
+fn read_i32<R:Read>(mut r:R)->Result<i32> {
     let mut x = [0;4];
     r.read_exact(&mut x)?;
     Ok(i32::from_be_bytes(x))
 }
 
-fn read_id_option<R:Read>(r:R)->Result<Option<PolygonId>,Error> {
+fn read_id_option<R:Read>(r:R)->Result<Option<PolygonId>> {
     let id = read_i32(r)?;
     if id < 0 {
 	Ok(None)
@@ -116,7 +117,7 @@ impl From<u8> for Source {
 }
 
 impl Point {
-    pub fn from_reader<R:Read>(mut r:R)->Result<Self,Error> {
+    pub fn from_reader<R:Read>(mut r:R)->Result<Self> {
 	let x = read_i32(&mut r)?;
 	let y = read_i32(&mut r)?;
 	Ok(Self{ x,y })
@@ -124,9 +125,30 @@ impl Point {
 }
 
 impl Polygon {
-    pub fn from_reader<R:Read>(mut r:R)->Result<Self,Error> {
-	let id = read_id_option(&mut r)?
-	    .ok_or_else(|| Error::new(ErrorKind::Other,"Invalid negative ID"))?;
+    pub fn from_reader<R:Read>(mut r:R,expected_id:Option<PolygonId>)
+			       ->Result<Option<Self>> {
+	let id =
+	    match read_id_option(&mut r) {
+		Ok(Some(id)) => {
+		    if let Some(eid) = expected_id {
+			if eid != id {
+			    bail!("Unexpected polygon ID {} (was expecting {})",
+				  id,eid);
+			}
+		    }
+		    id
+		}
+		Ok(None) => bail!("Invalid polygon ID"),
+		Err(e) => {
+		    if let Some(ed) = e.downcast_ref::<std::io::Error>() {
+			match ed.kind() {
+			    ErrorKind::UnexpectedEof => return Ok(None),
+			    _ => return Err(e)
+			}
+		    }
+		    return Ok(None)
+		}
+	    };
 	let n = read_u32(&mut r)? as usize;
 	let flag = read_u32(&mut r)?;
 
@@ -148,7 +170,7 @@ impl Polygon {
 	for _ in 0..n {
 	    points.push(Point::from_reader(&mut r)?);
 	}
-	Ok(Self{
+	Ok(Some(Self{
 	    id,
 	    n,
 	    level,
@@ -166,25 +188,20 @@ impl Polygon {
 	    ancestor,
 	    points,
 	    children:Vec::new()
-	})
-
+	}))
     }
 }
 
 impl Gshhg {
-    pub fn from_reader<R:Read>(mut r:R)->Result<Self,Error> {
+    pub fn from_reader<R:Read>(mut r:R)->Result<Self> {
 	let mut polygons = Vec::new();
+	let mut expected_id = Some(0);
 	loop {
-	    match Polygon::from_reader(&mut r) {
-		Ok(poly) => polygons.push(poly),
-		Err(e) => {
-		    match e.kind() {
-			ErrorKind::UnexpectedEof => break,
-			_ => return Err(e)
-		    }
-		}
+	    match Polygon::from_reader(&mut r,expected_id)? {
+		Some(poly) => polygons.push(poly),
+		None => break
 	    }
-
+	    expected_id = None;
 	}
 
 	// Fill in children

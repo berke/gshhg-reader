@@ -1,6 +1,6 @@
 [package]
 name = "gshhg-reader"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["Berke DURAK <bd@exhrd.fr>"]
 license = "Apache-2.0 OR MIT"
@@ -10,3 +10,7 @@ repository = "https://github.com/berke/gshhg-reader"
 
 [dependencies]
 serde = { version = "1", features = ["serde_derive"] }
+anyhow = { version = "1" }
+
+[[example]]
+name = "dump_gshhg"
