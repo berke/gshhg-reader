@@ -19,5 +19,6 @@ pub fn main() {
 		 poly.east,
 		 poly.south,
 		 poly.north);
+	println!("  {:#?}",poly);
     }
 }
