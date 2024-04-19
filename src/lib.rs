@@ -10,6 +10,8 @@ pub enum Level {
     Lake,
     IslandInLake,
     PondInIslandInLake,
+    AntarcticIceFront,
+    AntarcticGroundingLine,
     Other(u8)
 }
 
@@ -101,6 +103,8 @@ impl From<u8> for Level {
 	    2 => Self::Lake,
 	    3 => Self::IslandInLake,
 	    4 => Self::PondInIslandInLake,
+	    5 => Self::AntarcticIceFront,
+	    6 => Self::AntarcticGroundingLine,
 	    _ => Self::Other(x)
 	}
     }

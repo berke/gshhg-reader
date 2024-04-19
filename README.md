@@ -16,3 +16,7 @@ This is a loader for this binary format.
 ## Author
 
 Berke DURAK <bd@exhrd.fr>
+
+## Changes
+
+- 0.2.1: Add AntarcticIceFront and AntarcticGroundingLine levels
